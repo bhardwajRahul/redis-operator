@@ -1,130 +1,88 @@
+---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
-
 apiVersion: chainsaw.kyverno.io/v1alpha1
 kind: Test
 metadata:
-  name: redis-cluster-setup
+  name: setup-redis-cluster
 spec:
   steps:
-  - try:
-    - apply:
-        file: cluster.yaml
-    - assert:
-        file: ready-cluster.yaml
-    - assert:
-        file: ready-sts.yaml
-    - assert:
-        file: ready-svc.yaml
-    - assert:
-        file: ready-pvc.yaml
+    - try:
+        - apply:
+            file: cluster.yaml
+        - apply:
+            file: secret.yaml
+        - assert:
+            file: ready-cluster.yaml
+        - assert:
+            file: ready-sts.yaml
+        - assert:
+            file: ready-svc.yaml
+        - assert:
+            file: ready-pvc.yaml
+        - assert:
+            file: secret.yaml
 
-  - name: Sleep for five minutes
-    try:
-     - sleep:
-         duration: 5m
+    - name: Check Redis GET/SET
+      try:
+        - script:
+            timeout: 30s
+            content: >
+              kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-0 --
+              redis-cli -c -p 6379 -a Opstree1234 set foo-0 bar-0
+            check:
+              (contains($stdout, 'OK')): true
+        - script:
+            timeout: 30s
+            content: >
+              kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-0 --
+              redis-cli -c -p 6379 -a Opstree1234 get foo-0
+            check:
+              (contains($stdout, 'bar-0')): true
 
-  - name: Ping Cluster
-    try:
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-0 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-1 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-2 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-0 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-1 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
-     - script:
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-2 -- redis-cli -c -p 6379 ping
-         check:
-          ($stdout=='PONG'): true
+    - name: Scale Out Redis Cluster
+      try:
+        - apply:
+            file: cluster-scale-out.yaml
 
-  - name: Check Cluster
-    try:
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-0 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered.'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-1 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-2 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-0 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-1 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
-      - script:
-          content: |
-            kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-2 -- redis-cli --cluster check 127.0.0.1:6379 | grep 'All 16384 slots covered'
-          check:
-            ($stdout=='[OK] All 16384 slots covered.'): true
+    - name: Check Status 00
+      try:
+        - assert:
+            file: cluster-scale-out-status-00.yaml
 
+    - name: Check Status 01
+      try:
+        - assert:
+            file: cluster-scale-out-status-01.yaml
 
-  - name: Try saving a key With Password
-    try:
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-0 -- redis-cli -c -p 6379 set foo-0 bar-0
-         check:
-          ($stdout=='OK'): true
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-1 -- redis-cli -c -p 6379 set foo-1 bar-1
-         check:
-          ($stdout=='OK'): true
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-leader redis-cluster-v1beta2-leader-2 -- redis-cli -c -p 6379 set foo-2 bar-2
-         check:
-          ($stdout=='OK'): true
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-0 -- redis-cli -c -p 6379 set foo-3 bar-3
-         check:
-          ($stdout=='OK'): true
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-1 -- redis-cli -c -p 6379 set foo-4 bar-4
-         check:
-          ($stdout=='OK'): true
-     - script:
-         timeout: 30s
-         content: |
-          kubectl exec --namespace ${NAMESPACE} --container redis-cluster-v1beta2-follower redis-cluster-v1beta2-follower-2 -- redis-cli -c -p 6379 set foo-5 bar-5
-         check:
-          ($stdout=='OK'): true
+    - name: Check Status 02
+      try:
+        - assert:
+            file: cluster-scale-out-status-02.yaml
+
+    - name: Check Status 03
+      try:
+        - assert:
+            file: cluster-scale-out-status-03.yaml
+
+    - name: Scale In Redis Cluster
+      try:
+        - apply:
+            file: cluster.yaml
+        - assert:
+            file: ready-cluster.yaml
+
+    - name: redis-cluster-uninstall
+      try:
+        - delete:
+            ref:
+              name: redis-cluster-v1beta2
+              kind: RedisCluster
+              apiVersion: redis.redis.opstreelabs.in/v1beta2
+        - error:
+            file: ready-cluster.yaml
+        - error:
+            file: ready-sts.yaml
+        - error:
+            file: ready-svc.yaml
+        - error:
+            file: ready-pvc.yaml
