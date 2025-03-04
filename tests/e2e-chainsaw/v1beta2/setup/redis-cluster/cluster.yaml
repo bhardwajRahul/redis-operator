@@ -1,3 +1,4 @@
+---
 apiVersion: redis.redis.opstreelabs.in/v1beta2
 kind: RedisCluster
 metadata:
@@ -6,10 +7,17 @@ spec:
   clusterSize: 3
   clusterVersion: v7
   persistenceEnabled: true
+  redisConfig:
+    dynamicConfig:
+      - "slowlog-log-slower-than 5000"
   podSecurityContext:
     runAsUser: 1000
     fsGroup: 1000
   kubernetesConfig:
+    service:
+      headless:
+        additionalAnnotations:
+          test: test
     image: quay.io/opstree/redis:latest
     imagePullPolicy: Always
     resources:
@@ -19,6 +27,9 @@ spec:
       limits:
         cpu: 101m
         memory: 128Mi
+    redisSecret:
+      name: redis-secret
+      key: password
   redisExporter:
     enabled: true
     image: quay.io/opstree/redis-exporter:v1.44.0
@@ -34,14 +45,14 @@ spec:
     volumeClaimTemplate:
       spec:
         # storageClassName: standard
-        accessModes: ["ReadWriteOnce"]
+        accessModes: [ReadWriteOnce]
         resources:
           requests:
             storage: 1Gi
     nodeConfVolume: true
     nodeConfVolumeClaimTemplate:
       spec:
-        accessModes: ["ReadWriteOnce"]
+        accessModes: [ReadWriteOnce]
         resources:
           requests:
             storage: 1Gi
