@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.21 as builder
+FROM golang:1.23-alpine AS builder
 ARG BUILDOS
 ARG BUILDPLATFORM
 ARG BUILDARCH
@@ -18,10 +18,8 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
+COPY cmd/manager/main.go main.go
 COPY api/ api/
-COPY controllers/ controllers/
-COPY k8sutils/ k8sutils/
 COPY pkg/ pkg/
 COPY mocks/ mocks/
 
